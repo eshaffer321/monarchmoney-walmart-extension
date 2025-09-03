@@ -403,7 +403,10 @@ export class WalmartContentExtractor {
     return null;
   }
 
-  private parseNextData(_nextData: { props?: Record<string, unknown>; [key: string]: unknown }): OrderData | null {
+  private parseNextData(_nextData: {
+    props?: Record<string, unknown>;
+    [key: string]: unknown;
+  }): OrderData | null {
     // This would contain the full Next.js data parsing logic from the original
     // For now, returning null to focus on the module conversion
     return null;

@@ -12,25 +12,25 @@ A Chrome MV3 extension that extracts Walmart orders and surfaces them in a React
 
 ## Getting Started
 
-1) Install dependencies
+1. Install dependencies
 
 ```bash
 npm ci
 ```
 
-2) Dev (hot reload)
+2. Dev (hot reload)
 
 ```bash
 npm run dev
 ```
 
-3) Build
+3. Build
 
 ```bash
 npm run build
 ```
 
-4) Load extension
+4. Load extension
 
 - Chrome → chrome://extensions → Developer Mode → Load Unpacked → select `.wxt/chrome-mv3`
 

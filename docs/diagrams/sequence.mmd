@@ -1,0 +1,21 @@
+sequenceDiagram
+  autonumber
+  participant U as User on walmart.com
+  participant CS as Content Script
+  participant EX as Extractor
+  participant BG as Background
+  participant ST as chrome.storage.local
+  participant POP as Popup UI
+
+  U->>CS: Page loads (order history / order detail)
+  CS->>EX: Extract orders from DOM/state
+  EX-->>CS: Orders JSON
+  CS->>ST: Persist latest orders (optional)
+  CS->>BG: sendMessage({ type: "ORDERS_EXTRACTED", payload })
+  Note over BG: May dedupe/aggregate, update storage, log
+
+  U->>POP: Open extension popup
+  POP->>ST: Read latest orders
+  POP->>BG: Request sync/status (optional)
+  BG-->>POP: Respond with current state
+  POP-->>U: Render orders in React UI

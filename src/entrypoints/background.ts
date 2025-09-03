@@ -117,9 +117,7 @@ async function sendTabMessageWithRetry<T>(
     }
   }
   const errorMessage = lastError instanceof Error ? lastError.message : String(lastError);
-  throw new Error(
-    `Content script not ready after ${retries} attempts: ${errorMessage}`
-  );
+  throw new Error(`Content script not ready after ${retries} attempts: ${errorMessage}`);
 }
 
 // Update sync status
@@ -144,7 +142,14 @@ async function updateSyncStatus(status: string, details: SyncDetails = {}): Prom
 }
 
 // Simplified content script extraction using modern approach
-async function extractWithContentScript(options: ExtractOptions = {}): Promise<{ success: boolean; orderCount: number; extractionMode: string; data?: { orders: Order[] } }> {
+async function extractWithContentScript(
+  options: ExtractOptions = {}
+): Promise<{
+  success: boolean;
+  orderCount: number;
+  extractionMode: string;
+  data?: { orders: Order[] };
+}> {
   const { limit: _limit = 10 } = options;
 
   console.log("Using content script extraction...");

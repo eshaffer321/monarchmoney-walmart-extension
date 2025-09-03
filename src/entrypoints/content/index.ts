@@ -90,10 +90,7 @@ export default defineContentScript({
 
     // If Redux state exists, log its top-level keys
     if (window.__WML_REDUX_INITIAL_STATE__) {
-      logger.debug(
-        "Redux state top-level keys:",
-        Object.keys(window.__WML_REDUX_INITIAL_STATE__)
-      );
+      logger.debug("Redux state top-level keys:", Object.keys(window.__WML_REDUX_INITIAL_STATE__));
     }
 
     // If Next.js data exists, log its structure

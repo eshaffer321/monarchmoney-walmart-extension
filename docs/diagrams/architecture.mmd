@@ -1,0 +1,31 @@
+graph TD
+  subgraph Browser["Chrome MV3"]
+    CS["Content Script<br/>src/entrypoints/content/index.ts"]
+    BG["Background (Service Worker)<br/>src/entrypoints/background.ts"]
+    POP["Popup UI (React)<br/>src/ui/popup"]
+    STORE["chrome.storage.local"]
+  end
+
+  subgraph Shared
+    EX["Walmart Extractor<br/>src/shared/walmart-extractor.ts"]
+    SH["Shared Constants/Utils<br/>src/shared/*.ts"]
+  end
+
+  WALMART["walmart.com pages"]
+
+  WALMART -->|DOM / JSON| CS
+  CS --> EX
+  EX -->|Orders JSON| CS
+
+  CS -->|runtime.sendMessage| BG
+  CS -->|write/read| STORE
+
+  POP -->|read| STORE
+  POP -->|request data| BG
+  BG -->|respond / orchestrate| POP
+
+  BG -->|optional side-effects| STORE
+
+  SH -. used by .- CS
+  SH -. used by .- BG
+  SH -. used by .- POP
