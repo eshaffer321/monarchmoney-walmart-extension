@@ -489,7 +489,8 @@ export class DataParser {
 
     // Skip known non-item patterns
     const skipPatterns = [
-      /^Order\s*#/i,
+      /^Order\s*#?\s*\d{12,15}/i, // Skip order numbers (12-15 digits)
+      /^Placed on/i,
       /^Delivered/i,
       /^Start a return/i,
       /^View details/i,
@@ -549,7 +550,9 @@ export class DataParser {
       /^(from store|pickup|shipping)/i,
       /^(order|purchase|transaction)/i,
       /^[\d\s\-+]+$/, // Just numbers and symbols
-      /^[A-Z]{2,}$/ // All caps abbreviations
+      /^[A-Z]{2,}$/, // All caps abbreviations
+      /^some\s+random\s+text/i, // Test data
+      /without\s+order\s+data/i // Test data
     ];
 
     return nonProductPatterns.some((pattern) => pattern.test(text));

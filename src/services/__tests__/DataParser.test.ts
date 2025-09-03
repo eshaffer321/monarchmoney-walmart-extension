@@ -178,7 +178,7 @@ describe("DataParser", () => {
   describe("parseTextContent", () => {
     it("should extract order information from text", () => {
       const text = `
-        Order #123456
+        Order #200013724127732
         Placed on January 15, 2024
         Order Total: $99.99
         Product 1 $49.99
@@ -187,7 +187,7 @@ describe("DataParser", () => {
 
       const result = parser.parseTextContent(text);
 
-      expect(result.orderNumber).toBe("123456");
+      expect(result.orderNumber).toBe("200013724127732");
       expect(result.orderDate).toBe("January 15, 2024");
       expect(result.orderTotal).toBe(99.99);
       expect(result.items).toHaveLength(2);
@@ -208,9 +208,9 @@ describe("DataParser", () => {
 
   describe("extractOrderNumberFromText", () => {
     it("should extract order numbers", () => {
-      expect(parser.extractOrderNumberFromText("Order #123456")).toBe("123456");
-      expect(parser.extractOrderNumberFromText("Order 789-012")).toBe("789-012");
-      expect(parser.extractOrderNumberFromText("#999")).toBe("999");
+      expect(parser.extractOrderNumberFromText("Order #200013724127732")).toBe("200013724127732");
+      expect(parser.extractOrderNumberFromText("Order 123456789012")).toBe("123456789012");
+      expect(parser.extractOrderNumberFromText("#987654321098765")).toBe("987654321098765");
       expect(parser.extractOrderNumberFromText("no order")).toBeUndefined();
     });
   });

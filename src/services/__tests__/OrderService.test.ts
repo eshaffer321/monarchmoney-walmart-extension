@@ -171,9 +171,9 @@ describe("OrderService", () => {
 
   describe("extractOrderNumber", () => {
     it("should extract order numbers from text", () => {
-      expect(orderService.extractOrderNumber("Order #123456")).toBe("123456");
-      expect(orderService.extractOrderNumber("Order 789-012")).toBe("789-012");
-      expect(orderService.extractOrderNumber("#999888")).toBe("999888");
+      expect(orderService.extractOrderNumber("Order #200013724127732")).toBe("200013724127732");
+      expect(orderService.extractOrderNumber("Order 123456789012")).toBe("123456789012");
+      expect(orderService.extractOrderNumber("#987654321098765")).toBe("987654321098765");
       expect(orderService.extractOrderNumber("No order number")).toBeNull();
     });
   });
