@@ -1,8 +1,8 @@
 // defineContentScript will be available globally in WXT
 
 // Import constants for content script
-import { CONFIG, CONTENT_CONFIG, SELECTORS, PATTERNS, MESSAGE_TYPES } from '../../shared/index.js';
-import { WalmartContentExtractor } from '../../shared/walmart-extractor.js';
+import { CONFIG, CONTENT_CONFIG, SELECTORS, PATTERNS, MESSAGE_TYPES } from "../../shared/index.js";
+import { WalmartContentExtractor } from "../../shared/walmart-extractor.js";
 
 // Use content-specific config for content script, fallback to shared config
 const contentConfig = CONTENT_CONFIG || CONFIG;
@@ -18,7 +18,7 @@ const logger = {
 };
 
 export default defineContentScript({
-  matches: ['https://www.walmart.com/*'],
+  matches: ["https://www.walmart.com/*"],
   main() {
     // Immediately log that the script is loaded
     logger.debug("Walmart content script loading");
@@ -70,12 +70,18 @@ export default defineContentScript({
     });
 
     // Log available global objects
-    logger.debug("Window.__WML_REDUX_INITIAL_STATE__ exists:", !!(window as any).__WML_REDUX_INITIAL_STATE__);
+    logger.debug(
+      "Window.__WML_REDUX_INITIAL_STATE__ exists:",
+      !!(window as any).__WML_REDUX_INITIAL_STATE__
+    );
     logger.debug("Window.__NEXT_DATA__ exists:", !!(window as any).__NEXT_DATA__);
 
     // If Redux state exists, log its top-level keys
     if ((window as any).__WML_REDUX_INITIAL_STATE__) {
-      logger.debug("Redux state top-level keys:", Object.keys((window as any).__WML_REDUX_INITIAL_STATE__));
+      logger.debug(
+        "Redux state top-level keys:",
+        Object.keys((window as any).__WML_REDUX_INITIAL_STATE__)
+      );
     }
 
     // If Next.js data exists, log its structure

@@ -1,5 +1,5 @@
 // Walmart content extractor class - converted from original content.js
-import { SELECTORS, PATTERNS, FILTER_KEYWORDS } from './content-constants.js';
+import { SELECTORS, PATTERNS, FILTER_KEYWORDS } from "./content-constants.js";
 
 // Logger interface
 interface Logger {
@@ -13,7 +13,7 @@ interface Logger {
 
 export class WalmartContentExtractor {
   private extractedData: any = null;
-  
+
   constructor(private logger: Logger) {}
 
   // Extract order data from Redux state on Walmart pages
@@ -83,7 +83,9 @@ export class WalmartContentExtractor {
       }
 
       // Method 6: Last resort - try DOM extraction anyway
-      this.logger.debug("No data found in state objects, attempting DOM extraction as last resort...");
+      this.logger.debug(
+        "No data found in state objects, attempting DOM extraction as last resort..."
+      );
       if (window.location.pathname.includes("/orders")) {
         return this.extractOrderDetail();
       }

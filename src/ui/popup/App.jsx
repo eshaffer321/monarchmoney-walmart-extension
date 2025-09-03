@@ -1,21 +1,21 @@
-import React, { useState, useEffect } from 'react';
-import { MESSAGE_TYPES } from '../../shared/index.js';
-import './App.css';
+import React, { useState, useEffect } from "react";
+import { MESSAGE_TYPES } from "../../shared/index.js";
+import "./App.css";
 
 function App() {
   const [authStatus, setAuthStatus] = useState(null);
-  const [lastSync, setLastSync] = useState('Never');
+  const [lastSync, setLastSync] = useState("Never");
   const [cachedOrders, setCachedOrders] = useState(0);
   const [syncStatus, setSyncStatus] = useState(null);
   const [isSyncing, setIsSyncing] = useState(false);
-  const [mode, setMode] = useState('auto');
+  const [mode, setMode] = useState("auto");
   const [useCache, setUseCache] = useState(true);
   const [results, setResults] = useState(null);
   const [error, setError] = useState(null);
 
   // Format date for display
   const formatDate = (dateString) => {
-    if (!dateString) return 'Never';
+    if (!dateString) return "Never";
 
     const date = new Date(dateString);
     const now = new Date();
@@ -24,10 +24,10 @@ function App() {
     const diffHours = Math.floor(diffMs / 3600000);
     const diffDays = Math.floor(diffMs / 86400000);
 
-    if (diffMins < 1) return 'Just now';
-    if (diffMins < 60) return `${diffMins} minute${diffMins > 1 ? 's' : ''} ago`;
-    if (diffHours < 24) return `${diffHours} hour${diffHours > 1 ? 's' : ''} ago`;
-    if (diffDays < 7) return `${diffDays} day${diffDays > 1 ? 's' : ''} ago`;
+    if (diffMins < 1) return "Just now";
+    if (diffMins < 60) return `${diffMins} minute${diffMins > 1 ? "s" : ""} ago`;
+    if (diffHours < 24) return `${diffHours} hour${diffHours > 1 ? "s" : ""} ago`;
+    if (diffDays < 7) return `${diffDays} day${diffDays > 1 ? "s" : ""} ago`;
 
     return date.toLocaleDateString();
   };
@@ -53,7 +53,7 @@ function App() {
         setSyncStatus(response.syncStatus);
       }
     } catch (error) {
-      console.error('Error loading status:', error);
+      console.error("Error loading status:", error);
     }
   };
 
@@ -63,8 +63,8 @@ function App() {
       const response = await chrome.runtime.sendMessage({ type: MESSAGE_TYPES.CHECK_AUTH });
       setAuthStatus(response);
     } catch (error) {
-      console.error('Error checking auth:', error);
-      setAuthStatus({ authenticated: false, message: 'Error checking authentication' });
+      console.error("Error checking auth:", error);
+      setAuthStatus({ authenticated: false, message: "Error checking authentication" });
     }
   };
 
@@ -87,14 +87,14 @@ function App() {
       });
 
       if (response.success) {
-        console.log('Sync completed successfully');
+        console.log("Sync completed successfully");
         loadStatus();
       } else {
-        setError(response.error || 'Sync failed');
+        setError(response.error || "Sync failed");
       }
     } catch (error) {
-      console.error('Error syncing orders:', error);
-      setError('Failed to sync orders');
+      console.error("Error syncing orders:", error);
+      setError("Failed to sync orders");
     } finally {
       setIsSyncing(false);
     }
@@ -102,14 +102,14 @@ function App() {
 
   // Clear cache
   const clearCache = async () => {
-    if (confirm('This will clear all cached order data. Continue?')) {
+    if (confirm("This will clear all cached order data. Continue?")) {
       try {
         await chrome.runtime.sendMessage({ type: MESSAGE_TYPES.CLEAR_CACHE });
         setCachedOrders(0);
-        alert('Cache cleared successfully');
+        alert("Cache cleared successfully");
       } catch (error) {
-        console.error('Error clearing cache:', error);
-        alert('Failed to clear cache');
+        console.error("Error clearing cache:", error);
+        alert("Failed to clear cache");
       }
     }
   };
@@ -117,16 +117,16 @@ function App() {
   // Listen for status updates
   useEffect(() => {
     const handleMessage = (message) => {
-      if (message.type === 'SYNC_STATUS_UPDATE') {
+      if (message.type === "SYNC_STATUS_UPDATE") {
         setSyncStatus({
           status: message.payload.status,
           details: message.payload.details
         });
 
-        if (message.payload.status === 'complete') {
+        if (message.payload.status === "complete") {
           setResults(message.payload.details);
-        } else if (message.payload.status === 'error') {
-          setError(message.payload.details.message || 'An error occurred');
+        } else if (message.payload.status === "error") {
+          setError(message.payload.details.message || "An error occurred");
         }
       }
     };
@@ -156,10 +156,10 @@ function App() {
       );
     }
 
-    const statusClass = authStatus.authenticated ? 'authenticated' : 'error';
-    const statusText = authStatus.authenticated 
-      ? 'Logged in to Walmart' 
-      : (authStatus.message || 'Not logged in');
+    const statusClass = authStatus.authenticated ? "authenticated" : "error";
+    const statusText = authStatus.authenticated
+      ? "Logged in to Walmart"
+      : authStatus.message || "Not logged in";
 
     return (
       <div className="status-indicator">
@@ -171,25 +171,25 @@ function App() {
 
   // Render progress
   const renderProgress = () => {
-    if (!syncStatus || syncStatus.status === 'idle') return null;
+    if (!syncStatus || syncStatus.status === "idle") return null;
 
     const { status, details } = syncStatus;
-    const statusText = status.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+    const statusText = status.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 
     let progressPercent = 0;
-    let progressText = 'Processing...';
+    let progressText = "Processing...";
 
-    if (status === 'fetching_orders' || status === 'fetching_details') {
+    if (status === "fetching_orders" || status === "fetching_details") {
       if (details?.total) {
         progressPercent = (details.current / details.total) * 100;
         progressText = `${details.current} / ${details.total}`;
       } else {
         progressPercent = 50;
-        progressText = details?.message || 'Processing...';
+        progressText = details?.message || "Processing...";
       }
-    } else if (status === 'processing') {
+    } else if (status === "processing") {
       progressPercent = 90;
-      progressText = 'Processing data...';
+      progressText = "Processing data...";
     }
 
     return (
@@ -216,11 +216,15 @@ function App() {
 
     return (
       <section className="results-section">
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "12px" }}>
           <h3 style={{ margin: 0 }}>Sync Results</h3>
           <span className="badge badge-success">
             <svg className="badge-icon" fill="currentColor" viewBox="0 0 20 20">
-              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd"/>
+              <path
+                fillRule="evenodd"
+                d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
+                clipRule="evenodd"
+              />
             </svg>
             Success
           </span>
@@ -248,12 +252,12 @@ function App() {
                   {results.extractionMode && (
                     <tr>
                       <td>Mode</td>
-                      <td>{results.extractionMode === 'api' ? 'API' : 'Content Script'}</td>
+                      <td>{results.extractionMode === "api" ? "API" : "Content Script"}</td>
                     </tr>
                   )}
                 </tbody>
               </table>
-              <p style={{ marginTop: '12px', fontSize: '13px', color: '#6b7280' }}>
+              <p style={{ marginTop: "12px", fontSize: "13px", color: "#6b7280" }}>
                 Check the browser console to see the formatted data.
               </p>
             </>
@@ -269,10 +273,14 @@ function App() {
 
     return (
       <section className="error-section">
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "12px" }}>
           <span className="badge badge-error">
             <svg className="badge-icon" fill="currentColor" viewBox="0 0 20 20">
-              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd"/>
+              <path
+                fillRule="evenodd"
+                d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z"
+                clipRule="evenodd"
+              />
             </svg>
             Error
           </span>
@@ -303,15 +311,15 @@ function App() {
         </section>
 
         <section className="actions-section">
-          <button 
-            className="btn btn-primary" 
+          <button
+            className="btn btn-primary"
             disabled={!authStatus?.authenticated || isSyncing}
             onClick={syncOrders}
           >
-            <span className="btn-text">{isSyncing ? 'Syncing...' : 'Sync Orders'}</span>
+            <span className="btn-text">{isSyncing ? "Syncing..." : "Sync Orders"}</span>
             {isSyncing && <span className="spinner"></span>}
           </button>
-          
+
           <button className="btn btn-secondary" onClick={clearCache}>
             Clear Cache
           </button>
@@ -327,8 +335,8 @@ function App() {
 
           <div className="checkbox-group">
             <label>
-              <input 
-                type="checkbox" 
+              <input
+                type="checkbox"
                 checked={useCache}
                 onChange={(e) => setUseCache(e.target.checked)}
               />
@@ -342,9 +350,7 @@ function App() {
       </main>
 
       <footer>
-        <div className="footer-text">
-          Open browser console to see order data
-        </div>
+        <div className="footer-text">Open browser console to see order data</div>
       </footer>
     </div>
   );
