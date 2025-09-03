@@ -1,38 +1,68 @@
 // Walmart content extractor class - converted from original content.js
-import { SELECTORS, PATTERNS, FILTER_KEYWORDS } from "./content-constants.js";
+import { SELECTORS, PATTERNS } from "./content-constants.js";
+
+// Type definitions
+declare global {
+  interface Window {
+    __WML_REDUX_INITIAL_STATE__?: Record<string, unknown>;
+    __NEXT_DATA__?: {
+      props?: Record<string, unknown>;
+      [key: string]: unknown;
+    };
+  }
+}
 
 // Logger interface
 interface Logger {
-  debug: (...args: any[]) => void;
-  info: (...args: any[]) => void;
-  error: (...args: any[]) => void;
-  warn: (...args: any[]) => void;
+  debug: (...args: unknown[]) => void;
+  info: (...args: unknown[]) => void;
+  error: (...args: unknown[]) => void;
+  warn: (...args: unknown[]) => void;
   group: (label: string) => void;
   groupEnd: () => void;
 }
 
+interface OrderItem {
+  name: string;
+  price?: number;
+  quantity?: number;
+  productUrl?: string;
+}
+
+interface OrderData {
+  orders?: Array<{
+    orderNumber: string;
+    orderDate: string;
+    orderTotal?: number;
+    tax?: number;
+    deliveryCharges?: number;
+    tip?: number;
+    items?: OrderItem[];
+  }>;
+}
+
 export class WalmartContentExtractor {
-  private extractedData: any = null;
+  private extractedData: OrderData | null = null;
 
   constructor(private logger: Logger) {}
 
   // Extract order data from Redux state on Walmart pages
-  extractOrderData(): any {
+  extractOrderData(): OrderData | null {
     try {
       this.logger.debug("Starting order data extraction");
       this.logger.debug("Current URL:", window.location.href);
 
       // Method 1: Look for Redux state in window object
-      if ((window as any).__WML_REDUX_INITIAL_STATE__) {
+      if (window.__WML_REDUX_INITIAL_STATE__) {
         this.logger.debug("Found Redux state in window object");
-        const result = this.parseReduxState((window as any).__WML_REDUX_INITIAL_STATE__);
+        const result = this.parseReduxState(window.__WML_REDUX_INITIAL_STATE__);
         if (result) return result;
       }
 
       // Method 2: Look for Next.js data
-      if ((window as any).__NEXT_DATA__) {
+      if (window.__NEXT_DATA__) {
         this.logger.debug("Found Next.js data");
-        const result = this.parseNextData((window as any).__NEXT_DATA__);
+        const result = this.parseNextData(window.__NEXT_DATA__);
         if (result) return result;
       }
 
@@ -97,7 +127,7 @@ export class WalmartContentExtractor {
     }
   }
 
-  private extractOrderDetail(): any {
+  private extractOrderDetail(): OrderData | null {
     this.logger.debug("Extracting order detail from DOM");
 
     // Extract order number from URL
@@ -110,7 +140,7 @@ export class WalmartContentExtractor {
       tax: 0,
       deliveryCharges: 0,
       tip: 0,
-      items: [] as any[]
+      items: [] as OrderItem[]
     };
 
     // Try to extract from page content
@@ -167,7 +197,7 @@ export class WalmartContentExtractor {
     return { orders: [order] };
   }
 
-  private extractItemFromDOM(element: HTMLElement): any {
+  private extractItemFromDOM(element: HTMLElement): OrderItem | null {
     const text = element.textContent || "";
 
     // Skip non-product elements
@@ -294,7 +324,7 @@ export class WalmartContentExtractor {
     return null;
   }
 
-  private extractItemsFromText(text: string): any[] {
+  private extractItemsFromText(text: string): OrderItem[] {
     // Very basic text extraction as last resort
     const items = [];
     const lines = text
@@ -324,7 +354,7 @@ export class WalmartContentExtractor {
     return items;
   }
 
-  private extractOrderList(): any {
+  private extractOrderList(): OrderData | null {
     this.logger.debug("Extracting order list from DOM");
     const orders = [];
 
@@ -367,19 +397,19 @@ export class WalmartContentExtractor {
   }
 
   // Placeholder methods for completeness (these would need full implementation)
-  private parseReduxState(state: any): any {
+  private parseReduxState(_state: Record<string, unknown>): OrderData | null {
     // This would contain the full Redux state parsing logic from the original
     // For now, returning null to focus on the module conversion
     return null;
   }
 
-  private parseNextData(nextData: any): any {
+  private parseNextData(_nextData: { props?: Record<string, unknown>; [key: string]: unknown }): OrderData | null {
     // This would contain the full Next.js data parsing logic from the original
     // For now, returning null to focus on the module conversion
     return null;
   }
 
-  private findReactProps(): any {
+  private findReactProps(): OrderData | null {
     // This would contain the full React props finding logic from the original
     // For now, returning null to focus on the module conversion
     return null;

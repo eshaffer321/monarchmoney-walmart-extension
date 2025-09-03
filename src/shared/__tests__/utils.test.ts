@@ -21,7 +21,7 @@ describe("shared utils", () => {
 
   it("timeout rejects after ms", async () => {
     await expect(
-      timeout(new Promise((res) => setTimeout(() => res("late" as any), 50)), 10)
+      timeout(new Promise<string>((res) => setTimeout(() => res("late"), 50)), 10)
     ).rejects.toThrow("Timeout");
   });
 
