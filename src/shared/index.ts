@@ -66,11 +66,11 @@ export function delay(ms: number) {
   return new Promise((r) => setTimeout(r, ms));
 }
 export async function withRetry<T>(fn: () => Promise<T>, retries = 3, backoffMs = 500): Promise<T> {
-  let lastErr: any;
+  let lastErr: unknown;
   for (let i = 0; i < retries; i++) {
     try {
       return await fn();
-    } catch (e: any) {
+    } catch (e) {
       lastErr = e;
       await delay(backoffMs * (i + 1));
     }
@@ -83,7 +83,7 @@ export async function timeout<T>(p: Promise<T>, ms: number): Promise<T> {
     new Promise<T>((_, rej) => setTimeout(() => rej(new Error("Timeout")), ms))
   ]);
 }
-export function safeJsonParse<T = any>(s: string, fallback: T | null = null): T | null {
+export function safeJsonParse<T = unknown>(s: string, fallback: T | null = null): T | null {
   try {
     return JSON.parse(s);
   } catch {

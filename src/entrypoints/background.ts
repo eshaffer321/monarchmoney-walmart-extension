@@ -3,13 +3,55 @@
 // Import shared constants and utilities
 import { STORAGE_KEYS, SYNC_STATUS, MESSAGE_TYPES } from "../shared/index.js";
 
+// Type definitions
+interface AuthStatus {
+  authenticated: boolean;
+  message: string;
+}
+
+interface SyncDetails {
+  message?: string;
+  orderCount?: number;
+  extractionMode?: string;
+  itemCount?: number;
+}
+
+interface OrderItem {
+  name: string;
+  price: number;
+  quantity: number;
+  productUrl: string;
+}
+
+interface Order {
+  orderNumber: string;
+  orderDate: string;
+  orderTotal?: number;
+  tax?: number;
+  deliveryCharges?: number;
+  tip?: number;
+  items?: OrderItem[];
+}
+
+interface ContentScriptResponse {
+  success: boolean;
+  error?: string;
+  data?: {
+    orders: Order[];
+  };
+}
+
+interface ExtractOptions {
+  limit?: number;
+}
+
 // Cache management
 async function getProcessedOrders(): Promise<string[]> {
   const result = await chrome.storage.local.get(STORAGE_KEYS.PROCESSED_ORDERS);
   return result[STORAGE_KEYS.PROCESSED_ORDERS] || [];
 }
 
-async function addProcessedOrders(orderNumbers: string[]): Promise<void> {
+async function _addProcessedOrders(orderNumbers: string[]): Promise<void> {
   const existing = await getProcessedOrders();
   const updated = [...new Set([...existing, ...orderNumbers])];
   await chrome.storage.local.set({ [STORAGE_KEYS.PROCESSED_ORDERS]: updated });
@@ -20,7 +62,7 @@ async function clearProcessedOrders(): Promise<void> {
 }
 
 // Check Walmart authentication by fetching orders page
-async function checkAuth(): Promise<any> {
+async function checkAuth(): Promise<AuthStatus> {
   await updateSyncStatus(SYNC_STATUS.CHECKING_AUTH);
 
   try {
@@ -34,7 +76,7 @@ async function checkAuth(): Promise<any> {
       }
     });
 
-    let result: any = { authenticated: false, message: `HTTP ${response.status}` };
+    let result: AuthStatus = { authenticated: false, message: `HTTP ${response.status}` };
     if (response.status === 200) {
       const text = await response.text();
       if (text.includes("Sign in to your account") || text.includes("sign-in")) {
@@ -49,37 +91,37 @@ async function checkAuth(): Promise<any> {
       await updateSyncStatus(SYNC_STATUS.ERROR, { message: result.message });
     }
     return result;
-  } catch (error: any) {
-    const result = { authenticated: false, message: error.message };
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    const result = { authenticated: false, message: errorMessage };
     await chrome.storage.local.set({ [STORAGE_KEYS.AUTH_STATUS]: result });
     await updateSyncStatus(SYNC_STATUS.ERROR, { message: result.message });
     return result;
   }
 }
 
-async function sendTabMessageWithRetry<T = any>(
+async function sendTabMessageWithRetry<T>(
   tabId: number,
-  message: any,
+  message: { type: string },
   retries = 10,
   delayMs = 500
 ): Promise<T> {
-  let lastError: any;
+  let lastError: Error | unknown;
   for (let attempt = 0; attempt < retries; attempt++) {
     try {
-      const response = await chrome.tabs.sendMessage(tabId, message as any);
+      const response = await chrome.tabs.sendMessage(tabId, message);
       return response as T;
-    } catch (error: any) {
+    } catch (error) {
       lastError = error;
       await new Promise((r) => setTimeout(r, delayMs));
     }
   }
-  throw new Error(
-    `Content script not ready after ${retries} attempts: ${lastError?.message || lastError}`
-  );
+  const errorMessage = lastError instanceof Error ? lastError.message : String(lastError);
+  throw new Error(`Content script not ready after ${retries} attempts: ${errorMessage}`);
 }
 
 // Update sync status
-async function updateSyncStatus(status: string, details: any = {}): Promise<void> {
+async function updateSyncStatus(status: string, details: SyncDetails = {}): Promise<void> {
   await chrome.storage.local.set({
     [STORAGE_KEYS.SYNC_STATUS]: {
       status,
@@ -100,8 +142,13 @@ async function updateSyncStatus(status: string, details: any = {}): Promise<void
 }
 
 // Simplified content script extraction using modern approach
-async function extractWithContentScript(options: any = {}): Promise<any> {
-  const { limit = 10 } = options;
+async function extractWithContentScript(options: ExtractOptions = {}): Promise<{
+  success: boolean;
+  orderCount: number;
+  extractionMode: string;
+  data?: { orders: Order[] };
+}> {
+  const { limit: _limit = 10 } = options;
 
   console.log("Using content script extraction...");
 
@@ -148,12 +195,12 @@ async function extractWithContentScript(options: any = {}): Promise<any> {
       target: { tabId: tab.id! },
       files: ["content-scripts/content.js"]
     });
-  } catch (_) {
+  } catch {
     // Ignore if already injected
   }
 
   // Get order list from the page using content script message
-  let orderListResponse: any;
+  let orderListResponse: ContentScriptResponse;
   try {
     orderListResponse = await sendTabMessageWithRetry(
       tab.id!,
@@ -190,14 +237,14 @@ async function extractWithContentScript(options: any = {}): Promise<any> {
   });
 
   const formattedData = {
-    orders: orders.map((order: any) => ({
+    orders: orders.map((order: Order) => ({
       orderNumber: order.orderNumber,
       orderDate: order.orderDate,
       orderTotal: order.orderTotal || 0,
       tax: order.tax || 0,
       deliveryCharges: order.deliveryCharges || 0,
       tip: order.tip || 0,
-      items: (order.items || []).map((item: any) => ({
+      items: (order.items || []).map((item: OrderItem) => ({
         name: item.name,
         price: item.price || 0,
         quantity: item.quantity || 1,
@@ -220,7 +267,7 @@ async function extractWithContentScript(options: any = {}): Promise<any> {
     orderCount: orders.length,
     extractionMode: "content",
     itemCount: orders.reduce(
-      (sum: number, order: any) => sum + (order.items ? order.items.length : 0),
+      (sum: number, order: Order) => sum + (order.items ? order.items.length : 0),
       0
     )
   });

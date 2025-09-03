@@ -4,15 +4,26 @@
 import { CONFIG, CONTENT_CONFIG, SELECTORS, PATTERNS, MESSAGE_TYPES } from "../../shared/index.js";
 import { WalmartContentExtractor } from "../../shared/walmart-extractor.js";
 
+// Extend Window interface for Walmart-specific global properties
+declare global {
+  interface Window {
+    __WML_REDUX_INITIAL_STATE__?: Record<string, unknown>;
+    __NEXT_DATA__?: {
+      props?: Record<string, unknown>;
+      [key: string]: unknown;
+    };
+  }
+}
+
 // Use content-specific config for content script, fallback to shared config
 const contentConfig = CONTENT_CONFIG || CONFIG;
 
 // Logger that uses CONFIG.DEBUG from constants
 const logger = {
-  debug: (...args: any[]) => contentConfig.DEBUG && console.log("[Content]", ...args),
-  info: (...args: any[]) => console.log("[Content]", ...args),
-  error: (...args: any[]) => console.error("[Content]", ...args),
-  warn: (...args: any[]) => console.warn("[Content]", ...args),
+  debug: (...args: unknown[]) => contentConfig.DEBUG && console.log("[Content]", ...args),
+  info: (...args: unknown[]) => console.log("[Content]", ...args),
+  error: (...args: unknown[]) => console.error("[Content]", ...args),
+  warn: (...args: unknown[]) => console.warn("[Content]", ...args),
   group: (label: string) => contentConfig.DEBUG && console.group(`[Content] ${label}`),
   groupEnd: () => contentConfig.DEBUG && console.groupEnd()
 };
@@ -51,9 +62,10 @@ export default defineContentScript({
           } else {
             sendResponse({ success: true, data });
           }
-        } catch (error: any) {
+        } catch (error) {
           logger.error("Extraction error:", error);
-          sendResponse({ success: false, error: error.message, data: null });
+          const errorMessage = error instanceof Error ? error.message : String(error);
+          sendResponse({ success: false, error: errorMessage, data: null });
         }
         return true;
       }
@@ -72,23 +84,20 @@ export default defineContentScript({
     // Log available global objects
     logger.debug(
       "Window.__WML_REDUX_INITIAL_STATE__ exists:",
-      !!(window as any).__WML_REDUX_INITIAL_STATE__
+      !!window.__WML_REDUX_INITIAL_STATE__
     );
-    logger.debug("Window.__NEXT_DATA__ exists:", !!(window as any).__NEXT_DATA__);
+    logger.debug("Window.__NEXT_DATA__ exists:", !!window.__NEXT_DATA__);
 
     // If Redux state exists, log its top-level keys
-    if ((window as any).__WML_REDUX_INITIAL_STATE__) {
-      logger.debug(
-        "Redux state top-level keys:",
-        Object.keys((window as any).__WML_REDUX_INITIAL_STATE__)
-      );
+    if (window.__WML_REDUX_INITIAL_STATE__) {
+      logger.debug("Redux state top-level keys:", Object.keys(window.__WML_REDUX_INITIAL_STATE__));
     }
 
     // If Next.js data exists, log its structure
-    if ((window as any).__NEXT_DATA__) {
-      logger.debug("Next.js data keys:", Object.keys((window as any).__NEXT_DATA__));
-      if ((window as any).__NEXT_DATA__.props) {
-        logger.debug("Next.js props keys:", Object.keys((window as any).__NEXT_DATA__.props));
+    if (window.__NEXT_DATA__) {
+      logger.debug("Next.js data keys:", Object.keys(window.__NEXT_DATA__));
+      if (window.__NEXT_DATA__.props) {
+        logger.debug("Next.js props keys:", Object.keys(window.__NEXT_DATA__.props));
       }
     }
 
