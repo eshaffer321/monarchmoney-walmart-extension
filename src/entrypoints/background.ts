@@ -1,7 +1,7 @@
 // defineBackground will be available globally in WXT
 
 // Import shared constants and utilities
-import { STORAGE_KEYS, SYNC_STATUS, MESSAGE_TYPES } from '../shared/index.js';
+import { STORAGE_KEYS, SYNC_STATUS, MESSAGE_TYPES } from "../shared/index.js";
 
 // Cache management
 async function getProcessedOrders(): Promise<string[]> {
@@ -24,23 +24,23 @@ async function checkAuth(): Promise<any> {
   await updateSyncStatus(SYNC_STATUS.CHECKING_AUTH);
 
   try {
-    const response = await fetch('https://www.walmart.com/orders', {
-      method: 'GET',
-      credentials: 'include',
+    const response = await fetch("https://www.walmart.com/orders", {
+      method: "GET",
+      credentials: "include",
       headers: {
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-        'Accept-Language': 'en-US,en;q=0.5',
-        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36'
+        Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.5",
+        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"
       }
     });
 
     let result: any = { authenticated: false, message: `HTTP ${response.status}` };
     if (response.status === 200) {
       const text = await response.text();
-      if (text.includes('Sign in to your account') || text.includes('sign-in')) {
-        result = { authenticated: false, message: 'Not logged in to Walmart' };
+      if (text.includes("Sign in to your account") || text.includes("sign-in")) {
+        result = { authenticated: false, message: "Not logged in to Walmart" };
       } else {
-        result = { authenticated: true, message: 'Authenticated' };
+        result = { authenticated: true, message: "Authenticated" };
       }
     }
 
@@ -57,7 +57,12 @@ async function checkAuth(): Promise<any> {
   }
 }
 
-async function sendTabMessageWithRetry<T = any>(tabId: number, message: any, retries = 10, delayMs = 500): Promise<T> {
+async function sendTabMessageWithRetry<T = any>(
+  tabId: number,
+  message: any,
+  retries = 10,
+  delayMs = 500
+): Promise<T> {
   let lastError: any;
   for (let attempt = 0; attempt < retries; attempt++) {
     try {
@@ -68,7 +73,9 @@ async function sendTabMessageWithRetry<T = any>(tabId: number, message: any, ret
       await new Promise((r) => setTimeout(r, delayMs));
     }
   }
-  throw new Error(`Content script not ready after ${retries} attempts: ${lastError?.message || lastError}`);
+  throw new Error(
+    `Content script not ready after ${retries} attempts: ${lastError?.message || lastError}`
+  );
 }
 
 // Update sync status
@@ -129,7 +136,7 @@ async function extractWithContentScript(options: any = {}): Promise<any> {
   });
 
   // Additional wait for dynamic content and content script injection
-  await new Promise(resolve => setTimeout(resolve, 3000));
+  await new Promise((resolve) => setTimeout(resolve, 3000));
 
   await updateSyncStatus(SYNC_STATUS.FETCHING_ORDERS, {
     message: "Extracting order data..."
@@ -139,7 +146,7 @@ async function extractWithContentScript(options: any = {}): Promise<any> {
   try {
     await chrome.scripting.executeScript({
       target: { tabId: tab.id! },
-      files: ['content-scripts/content.js']
+      files: ["content-scripts/content.js"]
     });
   } catch (_) {
     // Ignore if already injected
@@ -148,7 +155,12 @@ async function extractWithContentScript(options: any = {}): Promise<any> {
   // Get order list from the page using content script message
   let orderListResponse: any;
   try {
-    orderListResponse = await sendTabMessageWithRetry(tab.id!, { type: 'EXTRACT_ORDER_DATA' }, 20, 500);
+    orderListResponse = await sendTabMessageWithRetry(
+      tab.id!,
+      { type: "EXTRACT_ORDER_DATA" },
+      20,
+      500
+    );
     console.log("Order list response:", orderListResponse);
   } catch (error) {
     console.error("Failed to communicate with content script:", error);
@@ -222,8 +234,8 @@ async function extractWithContentScript(options: any = {}): Promise<any> {
 }
 
 export default defineBackground(() => {
-  console.log('Walmart-Monarch Sync Background script initialized', {
-    id: browser.runtime.id,
+  console.log("Walmart-Monarch Sync Background script initialized", {
+    id: browser.runtime.id
   });
 
   // Initialize extension
