@@ -32,28 +32,38 @@ function App() {
     return date.toLocaleDateString();
   };
 
-  // Load initial status
-  const loadStatus = async () => {
-    try {
-      const response = await chrome.runtime.sendMessage({ type: MESSAGE_TYPES.GET_STATUS });
+  // Load initial status with retry
+  const loadStatus = async (retries = 3) => {
+    for (let i = 0; i < retries; i++) {
+      try {
+        const response = await chrome.runtime.sendMessage({ type: MESSAGE_TYPES.GET_STATUS });
 
-      if (response.authStatus) {
-        setAuthStatus(response.authStatus);
-      }
+        if (response) {
+          if (response.authStatus) {
+            setAuthStatus(response.authStatus);
+          }
 
-      if (response.lastSync) {
-        setLastSync(formatDate(response.lastSync));
-      }
+          if (response.lastSync) {
+            setLastSync(formatDate(response.lastSync));
+          }
 
-      if (response.processedOrderCount !== undefined) {
-        setCachedOrders(response.processedOrderCount);
-      }
+          if (response.processedOrderCount !== undefined) {
+            setCachedOrders(response.processedOrderCount);
+          }
 
-      if (response.syncStatus) {
-        setSyncStatus(response.syncStatus);
+          if (response.syncStatus) {
+            setSyncStatus(response.syncStatus);
+          }
+          return; // Success, exit
+        }
+      } catch (error) {
+        if (i === retries - 1) {
+          console.error("Error loading status after retries:", error);
+        } else {
+          // Wait a bit before retry
+          await new Promise((resolve) => setTimeout(resolve, 100));
+        }
       }
-    } catch (error) {
-      console.error("Error loading status:", error);
     }
   };
 
@@ -137,8 +147,14 @@ function App() {
 
   // Initialize
   useEffect(() => {
-    loadStatus();
-    checkAuth();
+    // Small delay to ensure background script is ready
+    const init = async () => {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      await loadStatus();
+      await checkAuth();
+    };
+
+    init();
 
     // Refresh status periodically
     const interval = setInterval(loadStatus, 30000);

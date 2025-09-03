@@ -1,13 +1,19 @@
-// defineBackground will be available globally in WXT
+/**
+ * Refactored background script - Thin orchestration layer
+ * All business logic has been extracted to services
+ */
 
-// Import shared constants and utilities
 import { STORAGE_KEYS, SYNC_STATUS, MESSAGE_TYPES } from "../shared/index.js";
-
-// Type definitions
-interface AuthStatus {
-  authenticated: boolean;
-  message: string;
-}
+import {
+  AuthService,
+  type AuthStatus,
+  type FetchResponse,
+  type FetchInit
+} from "../services/AuthService.js";
+import { OrderService, type Order } from "../services/OrderService.js";
+import { ChromeStorageAdapter } from "../adapters/StorageAdapter.js";
+import { ChromeTabAdapter } from "../adapters/TabAdapter.js";
+import { ChromeRuntimeAdapter } from "../adapters/RuntimeAdapter.js";
 
 interface SyncDetails {
   message?: string;
@@ -16,21 +22,8 @@ interface SyncDetails {
   itemCount?: number;
 }
 
-interface OrderItem {
-  name: string;
-  price: number;
-  quantity: number;
-  productUrl: string;
-}
-
-interface Order {
-  orderNumber: string;
-  orderDate: string;
-  orderTotal?: number;
-  tax?: number;
-  deliveryCharges?: number;
-  tip?: number;
-  items?: OrderItem[];
+interface ExtractOptions {
+  limit?: number;
 }
 
 interface ContentScriptResponse {
@@ -41,299 +34,311 @@ interface ContentScriptResponse {
   };
 }
 
-interface ExtractOptions {
-  limit?: number;
-}
+/**
+ * Background orchestrator - wires together services and adapters
+ */
+class BackgroundOrchestrator {
+  private authService: AuthService;
+  private orderService: OrderService;
+  private storageAdapter: ChromeStorageAdapter;
+  private tabAdapter: ChromeTabAdapter;
+  private runtimeAdapter: ChromeRuntimeAdapter;
 
-// Cache management
-async function getProcessedOrders(): Promise<string[]> {
-  const result = await chrome.storage.local.get(STORAGE_KEYS.PROCESSED_ORDERS);
-  return result[STORAGE_KEYS.PROCESSED_ORDERS] || [];
-}
+  constructor() {
+    // Initialize pure services
+    this.authService = new AuthService();
+    this.orderService = new OrderService();
 
-async function _addProcessedOrders(orderNumbers: string[]): Promise<void> {
-  const existing = await getProcessedOrders();
-  const updated = [...new Set([...existing, ...orderNumbers])];
-  await chrome.storage.local.set({ [STORAGE_KEYS.PROCESSED_ORDERS]: updated });
-}
+    // Initialize browser adapters
+    this.storageAdapter = new ChromeStorageAdapter("local");
+    this.tabAdapter = new ChromeTabAdapter();
+    this.runtimeAdapter = new ChromeRuntimeAdapter();
+  }
 
-async function clearProcessedOrders(): Promise<void> {
-  await chrome.storage.local.set({ [STORAGE_KEYS.PROCESSED_ORDERS]: [] });
-}
+  /**
+   * Initialize the extension
+   */
+  async initialize(): Promise<void> {
+    console.log("Walmart-Monarch Sync Background script initialized", {
+      id: this.runtimeAdapter.getId()
+    });
 
-// Check Walmart authentication by fetching orders page
-async function checkAuth(): Promise<AuthStatus> {
-  await updateSyncStatus(SYNC_STATUS.CHECKING_AUTH);
+    await this.updateSyncStatus(SYNC_STATUS.IDLE);
+    this.setupMessageHandlers();
+    this.setupInstallHandler();
+  }
 
-  try {
-    const response = await fetch("https://www.walmart.com/orders", {
-      method: "GET",
-      credentials: "include",
-      headers: {
-        Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-        "Accept-Language": "en-US,en;q=0.5",
-        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"
+  /**
+   * Setup message handlers
+   */
+  private setupMessageHandlers(): void {
+    this.runtimeAdapter.onMessage.addListener((request, _sender, sendResponse) => {
+      console.log("Background received message:", request.type);
+
+      switch (request.type) {
+        case MESSAGE_TYPES.CHECK_AUTH:
+          this.handleCheckAuth().then(sendResponse);
+          return true;
+
+        case MESSAGE_TYPES.SYNC_ORDERS:
+          this.handleSyncOrders(request.options || {}).then(sendResponse);
+          return true;
+
+        case MESSAGE_TYPES.GET_STATUS:
+          this.handleGetStatus().then(sendResponse);
+          return true;
+
+        case MESSAGE_TYPES.CLEAR_CACHE:
+          this.handleClearCache().then(sendResponse);
+          return true;
+
+        default:
+          console.warn("Unknown message type:", request.type);
+          sendResponse({ error: "Unknown message type" });
       }
     });
-
-    let result: AuthStatus = { authenticated: false, message: `HTTP ${response.status}` };
-    if (response.status === 200) {
-      const text = await response.text();
-      if (text.includes("Sign in to your account") || text.includes("sign-in")) {
-        result = { authenticated: false, message: "Not logged in to Walmart" };
-      } else {
-        result = { authenticated: true, message: "Authenticated" };
-      }
-    }
-
-    await chrome.storage.local.set({ [STORAGE_KEYS.AUTH_STATUS]: result });
-    if (!result.authenticated) {
-      await updateSyncStatus(SYNC_STATUS.ERROR, { message: result.message });
-    }
-    return result;
-  } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    const result = { authenticated: false, message: errorMessage };
-    await chrome.storage.local.set({ [STORAGE_KEYS.AUTH_STATUS]: result });
-    await updateSyncStatus(SYNC_STATUS.ERROR, { message: result.message });
-    return result;
   }
-}
 
-async function sendTabMessageWithRetry<T>(
-  tabId: number,
-  message: { type: string },
-  retries = 10,
-  delayMs = 500
-): Promise<T> {
-  let lastError: Error | unknown;
-  for (let attempt = 0; attempt < retries; attempt++) {
-    try {
-      const response = await chrome.tabs.sendMessage(tabId, message);
-      return response as T;
-    } catch (error) {
-      lastError = error;
-      await new Promise((r) => setTimeout(r, delayMs));
-    }
-  }
-  const errorMessage = lastError instanceof Error ? lastError.message : String(lastError);
-  throw new Error(`Content script not ready after ${retries} attempts: ${errorMessage}`);
-}
-
-// Update sync status
-async function updateSyncStatus(status: string, details: SyncDetails = {}): Promise<void> {
-  await chrome.storage.local.set({
-    [STORAGE_KEYS.SYNC_STATUS]: {
-      status,
-      details,
-      timestamp: new Date().toISOString()
-    }
-  });
-
-  // Notify popup of status change
-  chrome.runtime
-    .sendMessage({
-      type: MESSAGE_TYPES.SYNC_STATUS_UPDATE,
-      payload: { status, details }
-    })
-    .catch(() => {
-      // Popup might not be open, ignore error
-    });
-}
-
-// Simplified content script extraction using modern approach
-async function extractWithContentScript(options: ExtractOptions = {}): Promise<{
-  success: boolean;
-  orderCount: number;
-  extractionMode: string;
-  data?: { orders: Order[] };
-}> {
-  const { limit: _limit = 10 } = options;
-
-  console.log("Using content script extraction...");
-
-  await updateSyncStatus(SYNC_STATUS.CHECKING_AUTH, {
-    message: "Opening Walmart orders page..."
-  });
-
-  // Create or focus a tab with Walmart orders
-  let tab: chrome.tabs.Tab;
-  const existingTabs = await chrome.tabs.query({ url: "https://www.walmart.com/orders*" });
-
-  if (existingTabs.length > 0) {
-    tab = existingTabs[0];
-    await chrome.tabs.update(tab.id!, { active: false }); // Keep in background
-  } else {
-    tab = await chrome.tabs.create({
-      url: "https://www.walmart.com/orders",
-      active: false // Don't interrupt user
+  /**
+   * Setup installation handler
+   */
+  private setupInstallHandler(): void {
+    this.runtimeAdapter.onInstalled.addListener(() => {
+      console.log("Walmart-Monarch Sync Extension installed");
+      this.updateSyncStatus(SYNC_STATUS.IDLE);
     });
   }
 
-  // Wait for page to load completely
-  await new Promise<void>((resolve) => {
-    const checkReady = setInterval(() => {
-      chrome.tabs.get(tab.id!, (tab) => {
-        if (tab.status === "complete") {
-          clearInterval(checkReady);
-          resolve();
-        }
-      });
-    }, 100);
-  });
+  /**
+   * Handle auth check
+   */
+  private async handleCheckAuth(): Promise<AuthStatus> {
+    await this.updateSyncStatus(SYNC_STATUS.CHECKING_AUTH);
 
-  // Additional wait for dynamic content and content script injection
-  await new Promise((resolve) => setTimeout(resolve, 3000));
-
-  await updateSyncStatus(SYNC_STATUS.FETCHING_ORDERS, {
-    message: "Extracting order data..."
-  });
-
-  // Ensure content script is injected (defensive injection)
-  try {
-    await chrome.scripting.executeScript({
-      target: { tabId: tab.id! },
-      files: ["content-scripts/content.js"]
-    });
-  } catch {
-    // Ignore if already injected
-  }
-
-  // Get order list from the page using content script message
-  let orderListResponse: ContentScriptResponse;
-  try {
-    orderListResponse = await sendTabMessageWithRetry(
-      tab.id!,
-      { type: "EXTRACT_ORDER_DATA" },
-      20,
-      500
+    // Use fetch directly - it's available globally in service workers
+    // Cast to our FetchResponse type
+    const result = await this.authService.checkAuth(
+      fetch as (url: string, init?: FetchInit) => Promise<FetchResponse>
     );
-    console.log("Order list response:", orderListResponse);
-  } catch (error) {
-    console.error("Failed to communicate with content script:", error);
-    throw new Error(`Content script communication failed: ${(error as Error).message}`);
+
+    await this.storageAdapter.set({ [STORAGE_KEYS.AUTH_STATUS]: result });
+
+    if (!result.authenticated) {
+      await this.updateSyncStatus(SYNC_STATUS.ERROR, { message: result.message });
+    }
+
+    return result;
   }
 
-  if (!orderListResponse?.success) {
-    console.error("Content script extraction failed:", orderListResponse?.error);
-    throw new Error(orderListResponse?.error || "Content script extraction failed");
-  }
+  /**
+   * Handle order sync
+   */
+  private async handleSyncOrders(_options: ExtractOptions): Promise<{
+    success: boolean;
+    orderCount: number;
+    extractionMode: string;
+    data?: unknown;
+  }> {
+    // const { limit = 10 } = options; // Reserved for future use
 
-  const orders = orderListResponse.data?.orders || [];
-  console.log(`Found ${orders.length} orders from content script`);
+    console.log("Using content script extraction...");
 
-  if (orders.length === 0) {
-    console.log("No orders found on page. This might be a login page or empty order history.");
-    await updateSyncStatus(SYNC_STATUS.COMPLETE, {
-      message: "No orders found",
-      orderCount: 0
+    await this.updateSyncStatus(SYNC_STATUS.CHECKING_AUTH, {
+      message: "Opening Walmart orders page..."
     });
-    return { success: true, orderCount: 0, extractionMode: "content" };
+
+    // Create or focus tab
+    const tab = await this.getOrCreateOrdersTab();
+
+    // Wait for page load
+    await this.waitForTabReady(tab.id!);
+    await new Promise((resolve) => setTimeout(resolve, 3000));
+
+    await this.updateSyncStatus(SYNC_STATUS.FETCHING_ORDERS, {
+      message: "Extracting order data..."
+    });
+
+    // Ensure content script is injected
+    await this.injectContentScript(tab.id!);
+
+    // Extract orders
+    const orderData = await this.extractOrdersFromTab(tab.id!);
+
+    if (!orderData.success) {
+      throw new Error(orderData.error || "Content script extraction failed");
+    }
+
+    const orders = orderData.data?.orders || [];
+    console.log(`Found ${orders.length} orders from content script`);
+
+    if (orders.length === 0) {
+      await this.updateSyncStatus(SYNC_STATUS.COMPLETE, {
+        message: "No orders found",
+        orderCount: 0
+      });
+      return { success: true, orderCount: 0, extractionMode: "content" };
+    }
+
+    // Process orders using OrderService
+    await this.updateSyncStatus(SYNC_STATUS.PROCESSING, {
+      message: "Processing order data..."
+    });
+
+    const processedData = this.orderService.processOrders(orders);
+    const stats = this.orderService.calculateOrderStats(processedData.orders);
+
+    // Update storage
+    await this.storageAdapter.set({
+      [STORAGE_KEYS.LAST_SYNC]: new Date().toISOString()
+    });
+
+    await this.updateSyncStatus(SYNC_STATUS.COMPLETE, {
+      message: "Content script sync complete",
+      orderCount: stats.totalOrders,
+      extractionMode: "content",
+      itemCount: stats.totalItems
+    });
+
+    return {
+      success: true,
+      orderCount: stats.totalOrders,
+      extractionMode: "content",
+      data: processedData
+    };
   }
 
-  // Format data for backend
-  await updateSyncStatus(SYNC_STATUS.PROCESSING, {
-    message: "Processing order data..."
-  });
+  /**
+   * Handle get status
+   */
+  private async handleGetStatus(): Promise<{
+    authStatus: unknown;
+    syncStatus: unknown;
+    lastSync: unknown;
+    processedOrderCount: number;
+  }> {
+    const result = await this.storageAdapter.get([
+      STORAGE_KEYS.AUTH_STATUS,
+      STORAGE_KEYS.SYNC_STATUS,
+      STORAGE_KEYS.LAST_SYNC,
+      STORAGE_KEYS.PROCESSED_ORDERS
+    ]);
 
-  const formattedData = {
-    orders: orders.map((order: Order) => ({
-      orderNumber: order.orderNumber,
-      orderDate: order.orderDate,
-      orderTotal: order.orderTotal || 0,
-      tax: order.tax || 0,
-      deliveryCharges: order.deliveryCharges || 0,
-      tip: order.tip || 0,
-      items: (order.items || []).map((item: OrderItem) => ({
-        name: item.name,
-        price: item.price || 0,
-        quantity: item.quantity || 1,
-        productUrl: item.productUrl || ""
-      }))
-    }))
-  };
+    const processedOrders = (result[STORAGE_KEYS.PROCESSED_ORDERS] as string[]) || [];
 
-  // Log the data
-  console.log("Content script extraction complete:", formattedData);
+    return {
+      authStatus: result[STORAGE_KEYS.AUTH_STATUS],
+      syncStatus: result[STORAGE_KEYS.SYNC_STATUS],
+      lastSync: result[STORAGE_KEYS.LAST_SYNC],
+      processedOrderCount: processedOrders.length
+    };
+  }
 
-  // Update last sync time
-  await chrome.storage.local.set({
-    [STORAGE_KEYS.LAST_SYNC]: new Date().toISOString()
-  });
+  /**
+   * Handle clear cache
+   */
+  private async handleClearCache(): Promise<{ success: boolean }> {
+    await this.storageAdapter.set({ [STORAGE_KEYS.PROCESSED_ORDERS]: [] });
+    this.orderService.clearProcessedOrders();
+    return { success: true };
+  }
 
-  // Update status to complete
-  await updateSyncStatus(SYNC_STATUS.COMPLETE, {
-    message: "Content script sync complete",
-    orderCount: orders.length,
-    extractionMode: "content",
-    itemCount: orders.reduce(
-      (sum: number, order: Order) => sum + (order.items ? order.items.length : 0),
-      0
-    )
-  });
+  /**
+   * Get or create orders tab
+   */
+  private async getOrCreateOrdersTab(): Promise<{ id?: number }> {
+    const existingTabs = await this.tabAdapter.query({
+      url: "https://www.walmart.com/orders*"
+    });
 
-  return {
-    success: true,
-    orderCount: orders.length,
-    extractionMode: "content",
-    data: formattedData
-  };
+    if (existingTabs.length > 0) {
+      const tab = existingTabs[0];
+      await this.tabAdapter.update(tab.id!, { active: false });
+      return tab;
+    }
+
+    return await this.tabAdapter.create({
+      url: "https://www.walmart.com/orders",
+      active: false
+    });
+  }
+
+  /**
+   * Wait for tab to be ready
+   */
+  private async waitForTabReady(tabId: number): Promise<void> {
+    return new Promise((resolve) => {
+      const checkReady = setInterval(async () => {
+        try {
+          const tab = await this.tabAdapter.get(tabId);
+          if (tab.status === "complete") {
+            clearInterval(checkReady);
+            resolve();
+          }
+        } catch {
+          // Tab might be loading
+        }
+      }, 100);
+    });
+  }
+
+  /**
+   * Inject content script
+   */
+  private async injectContentScript(tabId: number): Promise<void> {
+    try {
+      await this.tabAdapter.executeScript(tabId, {
+        file: "content-scripts/content.js"
+      });
+    } catch {
+      // Might already be injected
+    }
+  }
+
+  /**
+   * Extract orders from tab
+   */
+  private async extractOrdersFromTab(tabId: number): Promise<ContentScriptResponse> {
+    const maxRetries = 20;
+    const delayMs = 500;
+
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+      try {
+        const response = await this.tabAdapter.sendMessage<ContentScriptResponse>(tabId, {
+          type: "EXTRACT_ORDER_DATA"
+        });
+        return response;
+      } catch {
+        await new Promise((r) => setTimeout(r, delayMs));
+      }
+    }
+
+    throw new Error(`Content script not ready after ${maxRetries} attempts`);
+  }
+
+  /**
+   * Update sync status
+   */
+  private async updateSyncStatus(status: string, details: SyncDetails = {}): Promise<void> {
+    await this.storageAdapter.set({
+      [STORAGE_KEYS.SYNC_STATUS]: {
+        status,
+        details,
+        timestamp: new Date().toISOString()
+      }
+    });
+
+    // Notify popup (ignore errors if popup not open)
+    this.runtimeAdapter
+      .sendMessage({
+        type: MESSAGE_TYPES.SYNC_STATUS_UPDATE,
+        payload: { status, details }
+      })
+      .catch(() => {});
+  }
 }
 
+// Initialize orchestrator when background script loads
 export default defineBackground(() => {
-  console.log("Walmart-Monarch Sync Background script initialized", {
-    id: browser.runtime.id
-  });
-
-  // Initialize extension
-  updateSyncStatus(SYNC_STATUS.IDLE);
-
-  // Message handler
-  chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-    console.log("Background received message:", request.type);
-
-    switch (request.type) {
-      case MESSAGE_TYPES.CHECK_AUTH:
-        checkAuth().then(sendResponse);
-        return true; // Will respond asynchronously
-
-      case MESSAGE_TYPES.SYNC_ORDERS:
-        extractWithContentScript(request.options || {}).then(sendResponse);
-        return true; // Will respond asynchronously
-
-      case MESSAGE_TYPES.GET_STATUS:
-        chrome.storage.local
-          .get([
-            STORAGE_KEYS.AUTH_STATUS,
-            STORAGE_KEYS.SYNC_STATUS,
-            STORAGE_KEYS.LAST_SYNC,
-            STORAGE_KEYS.PROCESSED_ORDERS
-          ])
-          .then((result) => {
-            sendResponse({
-              authStatus: result[STORAGE_KEYS.AUTH_STATUS],
-              syncStatus: result[STORAGE_KEYS.SYNC_STATUS],
-              lastSync: result[STORAGE_KEYS.LAST_SYNC],
-              processedOrderCount: (result[STORAGE_KEYS.PROCESSED_ORDERS] || []).length
-            });
-          });
-        return true; // Will respond asynchronously
-
-      case MESSAGE_TYPES.CLEAR_CACHE:
-        clearProcessedOrders().then(() => {
-          sendResponse({ success: true });
-        });
-        return true; // Will respond asynchronously
-
-      default:
-        console.warn("Unknown message type:", request.type);
-        sendResponse({ error: "Unknown message type" });
-    }
-  });
-
-  // Installation handler
-  chrome.runtime.onInstalled.addListener(() => {
-    console.log("Walmart-Monarch Sync Extension installed");
-    updateSyncStatus(SYNC_STATUS.IDLE);
-  });
+  const orchestrator = new BackgroundOrchestrator();
+  orchestrator.initialize();
 });

@@ -62,11 +62,12 @@ export const PATTERNS = {
   QUANTITY_X: /^\s*(\d+)\s*x\s+/i,
   QUANTITY_PARENS: /\(\s*(\d+)\s*\)$/,
 
-  // Date patterns
-  DATE: /(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+\d{1,2},?\s+\d{4}/i,
+  // Date patterns - Updated to handle Walmart's format (can be without year)
+  // Matches "Aug 26, 2024" or "Aug 26" or "Delivered on Aug 26"
+  DATE: /(?:(?:Delivered|Placed|Order(?:ed)?)\s+on\s+)?(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+\d{1,2}(?:,?\s+\d{4})?/i,
 
-  // Order patterns
-  ORDER_NUMBER: /(?:Order\s*#?|#)\s*([\d-]+)/i,
+  // Order patterns - Updated for Walmart format (e.g., Order# 200013724127732)
+  ORDER_NUMBER: /(?:Order\s*#?\s*)?(\d{12,15})/i,
   ORDER_TOTAL: /(?:Total|Order Total)\s*\$\s*([\d,]+\.?\d{2})/i,
 
   // Text to remove from product names

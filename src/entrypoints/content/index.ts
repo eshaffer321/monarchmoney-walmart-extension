@@ -1,8 +1,22 @@
-// defineContentScript will be available globally in WXT
+/**
+ * Refactored content script - Thin orchestration layer
+ * Uses refactored WalmartContentExtractor with DataParser service
+ */
 
-// Import constants for content script
-import { CONFIG, CONTENT_CONFIG, SELECTORS, PATTERNS, MESSAGE_TYPES } from "../../shared/index.js";
+// defineContentScript will be available globally in WXT
+import { CONFIG, CONTENT_CONFIG, MESSAGE_TYPES } from "../../shared/index.js";
 import { WalmartContentExtractor } from "../../shared/walmart-extractor.js";
+
+// Type definitions for message handling
+interface ContentMessage {
+  type: string;
+  [key: string]: unknown;
+}
+
+interface MessageSender {
+  tab?: chrome.tabs.Tab;
+  id?: string;
+}
 
 // Extend Window interface for Walmart-specific global properties
 declare global {
@@ -15,10 +29,10 @@ declare global {
   }
 }
 
-// Use content-specific config for content script, fallback to shared config
+// Use content-specific config or fallback to shared config
 const contentConfig = CONTENT_CONFIG || CONFIG;
 
-// Logger that uses CONFIG.DEBUG from constants
+// Logger configuration
 const logger = {
   debug: (...args: unknown[]) => contentConfig.DEBUG && console.log("[Content]", ...args),
   info: (...args: unknown[]) => console.log("[Content]", ...args),
@@ -31,76 +45,100 @@ const logger = {
 export default defineContentScript({
   matches: ["https://www.walmart.com/*"],
   main() {
-    // Immediately log that the script is loaded
-    logger.debug("Walmart content script loading");
-    logger.debug("URL:", window.location.href);
-    logger.debug("Page title:", document.title);
-    logger.debug("Ready state:", document.readyState);
+    // Use console.log directly to ensure we see the logs
+    console.log("[Content] Walmart content script initialized");
+    console.log("[Content] URL:", window.location.href);
+    console.log("[Content] Page title:", document.title);
 
-    // Test that constants are loaded
-    logger.debug("CONFIG loaded:", !!CONFIG);
-    logger.debug("CONTENT_CONFIG loaded:", !!CONTENT_CONFIG);
-    logger.debug("PATTERNS loaded:", !!PATTERNS);
-    logger.debug("SELECTORS loaded:", !!SELECTORS);
-    logger.debug("PATTERNS.DATE:", PATTERNS.DATE);
-    logger.debug("SELECTORS.ITEM_CONTAINERS length:", SELECTORS.ITEM_CONTAINERS?.length);
+    // Create extractor instance
+    const extractor = new WalmartContentExtractor(logger);
 
-    // Message handler for communication with background script
-    browser.runtime.onMessage.addListener((request, sender, sendResponse) => {
-      logger.debug("Content script received message:", request.type);
+    // Setup message handler
+    browser.runtime.onMessage.addListener(
+      (
+        request: ContentMessage,
+        _sender: MessageSender,
+        sendResponse: (response?: unknown) => void
+      ) => {
+        logger.debug("Content script received message:", request.type);
 
-      if (request.type === MESSAGE_TYPES.EXTRACT_ORDER_DATA) {
-        try {
-          logger.debug("Starting order extraction...");
-          const extractor = new WalmartContentExtractor(logger);
-          const data = extractor.extractOrderData();
-          logger.debug("Extraction complete. Data:", data);
+        switch (request.type) {
+          case MESSAGE_TYPES.EXTRACT_ORDER_DATA:
+            handleExtractOrderData(extractor, sendResponse);
+            return true;
 
-          if (!data) {
-            logger.warn("No data extracted");
-            sendResponse({ success: false, error: "No data found", data: null });
-          } else {
-            sendResponse({ success: true, data });
-          }
-        } catch (error) {
-          logger.error("Extraction error:", error);
-          const errorMessage = error instanceof Error ? error.message : String(error);
-          sendResponse({ success: false, error: errorMessage, data: null });
+          case MESSAGE_TYPES.CHECK_PAGE_TYPE:
+            handleCheckPageType(sendResponse);
+            return true;
+
+          default:
+            logger.warn("Unknown message type:", request.type);
+            sendResponse({ error: "Unknown message type" });
         }
-        return true;
       }
-
-      if (request.type === MESSAGE_TYPES.CHECK_PAGE_TYPE) {
-        const pageType = window.location.pathname.startsWith("/orders/")
-          ? "order_detail"
-          : window.location.pathname === "/orders"
-            ? "order_list"
-            : "other";
-        sendResponse({ pageType, url: window.location.href });
-        return true;
-      }
-    });
-
-    // Log available global objects
-    logger.debug(
-      "Window.__WML_REDUX_INITIAL_STATE__ exists:",
-      !!window.__WML_REDUX_INITIAL_STATE__
     );
-    logger.debug("Window.__NEXT_DATA__ exists:", !!window.__NEXT_DATA__);
 
-    // If Redux state exists, log its top-level keys
-    if (window.__WML_REDUX_INITIAL_STATE__) {
-      logger.debug("Redux state top-level keys:", Object.keys(window.__WML_REDUX_INITIAL_STATE__));
-    }
-
-    // If Next.js data exists, log its structure
-    if (window.__NEXT_DATA__) {
-      logger.debug("Next.js data keys:", Object.keys(window.__NEXT_DATA__));
-      if (window.__NEXT_DATA__.props) {
-        logger.debug("Next.js props keys:", Object.keys(window.__NEXT_DATA__.props));
-      }
-    }
-
-    logger.info("Walmart content script loaded successfully with ES modules");
+    console.log("[Content] Walmart content script ready and listening for messages");
   }
 });
+
+/**
+ * Handle order data extraction
+ */
+function handleExtractOrderData(
+  extractor: WalmartContentExtractor,
+  sendResponse: (response: unknown) => void
+): void {
+  try {
+    console.log("[Content] handleExtractOrderData called");
+    const data = extractor.extractOrderData();
+    console.log("[Content] Extraction result:", data);
+
+    if (!data) {
+      console.warn("[Content] No data extracted");
+      sendResponse({
+        success: false,
+        error: "No data found",
+        data: null
+      });
+    } else {
+      console.log("[Content] Extraction complete. Orders found:", data.orders?.length || 0);
+      sendResponse({
+        success: true,
+        data
+      });
+    }
+  } catch (error) {
+    logger.error("Extraction error:", error);
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    sendResponse({
+      success: false,
+      error: errorMessage,
+      data: null
+    });
+  }
+}
+
+/**
+ * Handle page type check
+ */
+function handleCheckPageType(sendResponse: (response: unknown) => void): void {
+  const pageType = getPageType();
+  sendResponse({
+    pageType,
+    url: window.location.href
+  });
+}
+
+/**
+ * Determine the current page type
+ */
+function getPageType(): string {
+  if (window.location.pathname.startsWith("/orders/")) {
+    return "order_detail";
+  } else if (window.location.pathname === "/orders") {
+    return "order_list";
+  } else {
+    return "other";
+  }
+}
