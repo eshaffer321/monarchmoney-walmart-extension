@@ -142,9 +142,7 @@ async function updateSyncStatus(status: string, details: SyncDetails = {}): Prom
 }
 
 // Simplified content script extraction using modern approach
-async function extractWithContentScript(
-  options: ExtractOptions = {}
-): Promise<{
+async function extractWithContentScript(options: ExtractOptions = {}): Promise<{
   success: boolean;
   orderCount: number;
   extractionMode: string;
