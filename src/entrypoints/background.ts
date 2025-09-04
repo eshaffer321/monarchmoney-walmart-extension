@@ -37,7 +37,7 @@ interface ContentScriptResponse {
 /**
  * Background orchestrator - wires together services and adapters
  */
-class BackgroundOrchestrator {
+export class BackgroundOrchestrator {
   private authService: AuthService;
   private orderService: OrderService;
   private storageAdapter: ChromeStorageAdapter;
@@ -125,6 +125,9 @@ class BackgroundOrchestrator {
 
     if (!result.authenticated) {
       await this.updateSyncStatus(SYNC_STATUS.ERROR, { message: result.message });
+    } else {
+      // Reset to IDLE after successful auth check
+      await this.updateSyncStatus(SYNC_STATUS.IDLE);
     }
 
     return result;
