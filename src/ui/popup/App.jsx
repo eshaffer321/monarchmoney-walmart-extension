@@ -8,7 +8,7 @@ function App() {
   const [cachedOrders, setCachedOrders] = useState(0);
   const [syncStatus, setSyncStatus] = useState(null);
   const [isSyncing, setIsSyncing] = useState(false);
-  const [mode, setMode] = useState("auto");
+  const [mode, setMode] = useState("content");
   const [useCache, setUseCache] = useState(true);
   const [results, setResults] = useState(null);
   const [error, setError] = useState(null);
@@ -187,7 +187,8 @@ function App() {
 
   // Render progress
   const renderProgress = () => {
-    if (!syncStatus || syncStatus.status === "idle") return null;
+    // Only show sync status when actually syncing
+    if (!isSyncing || !syncStatus || syncStatus.status === "idle") return null;
 
     const { status, details } = syncStatus;
     const statusText = status.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
@@ -343,9 +344,9 @@ function App() {
           <div className="select-group">
             <label htmlFor="modeSelect">Extraction Mode:</label>
             <select id="modeSelect" value={mode} onChange={(e) => setMode(e.target.value)}>
+              <option value="content">Content Script (Recommended)</option>
               <option value="auto">Auto (API → Content Script)</option>
               <option value="api">API Only (Fast)</option>
-              <option value="content">Content Script Only (Reliable)</option>
             </select>
           </div>
 

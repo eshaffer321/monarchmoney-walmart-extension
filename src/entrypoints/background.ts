@@ -24,6 +24,8 @@ interface SyncDetails {
 
 interface ExtractOptions {
   limit?: number;
+  useCache?: boolean;
+  mode?: string;
 }
 
 interface ContentScriptResponse {
@@ -37,7 +39,7 @@ interface ContentScriptResponse {
 /**
  * Background orchestrator - wires together services and adapters
  */
-class BackgroundOrchestrator {
+export class BackgroundOrchestrator {
   private authService: AuthService;
   private orderService: OrderService;
   private storageAdapter: ChromeStorageAdapter;
@@ -125,6 +127,9 @@ class BackgroundOrchestrator {
 
     if (!result.authenticated) {
       await this.updateSyncStatus(SYNC_STATUS.ERROR, { message: result.message });
+    } else {
+      // Reset to IDLE after successful auth check
+      await this.updateSyncStatus(SYNC_STATUS.IDLE);
     }
 
     return result;
@@ -133,15 +138,16 @@ class BackgroundOrchestrator {
   /**
    * Handle order sync
    */
-  private async handleSyncOrders(_options: ExtractOptions): Promise<{
+  private async handleSyncOrders(options: ExtractOptions): Promise<{
     success: boolean;
     orderCount: number;
     extractionMode: string;
     data?: unknown;
   }> {
-    // const { limit = 10 } = options; // Reserved for future use
+    const { useCache = true } = options;
 
     console.log("Using content script extraction...");
+    console.log("Cache enabled:", useCache);
 
     await this.updateSyncStatus(SYNC_STATUS.CHECKING_AUTH, {
       message: "Opening Walmart orders page..."
@@ -179,18 +185,55 @@ class BackgroundOrchestrator {
       return { success: true, orderCount: 0, extractionMode: "content" };
     }
 
+    // Get cached orders if cache is enabled
+    let ordersToProcess = orders;
+    if (useCache) {
+      const cached = await this.storageAdapter.get([STORAGE_KEYS.PROCESSED_ORDERS]);
+      const processedOrderNumbers = (cached[STORAGE_KEYS.PROCESSED_ORDERS] as string[]) || [];
+      
+      console.log(`Found ${processedOrderNumbers.length} cached order numbers`);
+      
+      // Filter out already processed orders
+      ordersToProcess = this.orderService.filterNewOrders(orders, processedOrderNumbers);
+      console.log(`${ordersToProcess.length} new orders to process (${orders.length - ordersToProcess.length} skipped)`);
+      
+      if (ordersToProcess.length === 0) {
+        await this.updateSyncStatus(SYNC_STATUS.COMPLETE, {
+          message: "No new orders to sync",
+          orderCount: 0
+        });
+        return { success: true, orderCount: 0, extractionMode: "content" };
+      }
+    }
+
     // Process orders using OrderService
     await this.updateSyncStatus(SYNC_STATUS.PROCESSING, {
       message: "Processing order data..."
     });
 
-    const processedData = this.orderService.processOrders(orders);
+    const processedData = this.orderService.processOrders(ordersToProcess);
     const stats = this.orderService.calculateOrderStats(processedData.orders);
 
     // Update storage
     await this.storageAdapter.set({
       [STORAGE_KEYS.LAST_SYNC]: new Date().toISOString()
     });
+
+    // Save processed orders to cache if cache is enabled
+    if (useCache && processedData.orders.length > 0) {
+      const cached = await this.storageAdapter.get([STORAGE_KEYS.PROCESSED_ORDERS]);
+      const existingProcessed = (cached[STORAGE_KEYS.PROCESSED_ORDERS] as string[]) || [];
+      
+      // Add new order numbers to the cache
+      const newOrderNumbers = processedData.orders.map(order => order.orderNumber);
+      const updatedProcessed = [...new Set([...existingProcessed, ...newOrderNumbers])];
+      
+      await this.storageAdapter.set({
+        [STORAGE_KEYS.PROCESSED_ORDERS]: updatedProcessed
+      });
+      
+      console.log(`Updated cache with ${newOrderNumbers.length} new orders (total cached: ${updatedProcessed.length})`);
+    }
 
     await this.updateSyncStatus(SYNC_STATUS.COMPLETE, {
       message: "Content script sync complete",
